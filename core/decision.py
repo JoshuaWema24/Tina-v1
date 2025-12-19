@@ -1,5 +1,5 @@
 from core.router import classify_intent
-from experts import conversation, action, coding, knowledge
+from experts import conversation, action, coding
 
 def process_input(text: str):
     intent = classify_intent(text)
@@ -9,8 +9,5 @@ def process_input(text: str):
 
     if intent == "coding":
         return coding.handle(text)
-
-    if intent == "knowledge":
-        return knowledge.handle(text)
 
     return conversation.handle(text)
