@@ -1,8 +1,7 @@
 # main.py
-
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from core.llm import process_input
+from experts.conversation import handle  # Import the updated handle function
 
 app = FastAPI(
     title="Tina AI",
@@ -29,10 +28,11 @@ def root():
 @app.get("/ask")
 def ask(q: str = Query(..., description="Your question or input to Tina AI")):
     """
-    Endpoint to process user input via process_input function
+    Endpoint to process user input via conversation expert.
     """
     try:
-        response = process_input(q)
+        # Use the updated handle function from conversation.py
+        response = handle(q)
         return {"response": response}
     except Exception as e:
         return {"error": str(e)}
