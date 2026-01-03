@@ -1,7 +1,7 @@
 # core/llm.py
 
 from core.router import classify_intent
-from experts import action, coding  # conversation and knowledge imported locally
+from experts import action, coding, knowledge, hacking, conversation
 
 def call_llm(prompt: str) -> str:
     """
@@ -23,9 +23,13 @@ def process_input(text: str) -> str:
         return coding.handle(text)
 
     if intent == "knowledge":
-        from experts import knowledge  # local import to avoid circular import
+        from experts import knowledge 
         return knowledge.handle(text)
+    
+    if intent == "hacking":
+        from experts import hacking
+        return hacking.handle(text)
 
     # conversation
-    from experts import conversation  # local import to avoid circular import
+    from experts import conversation  
     return conversation.handle(text)
