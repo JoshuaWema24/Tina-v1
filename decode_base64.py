@@ -1,14 +1,21 @@
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+# download_phi2.py
+"""
+Download and cache the Phi-2-small model locally for Tina.
+"""
 
-# Define model and tokenizer name
-model_name = "gpt2"  # You can use "distilgpt2" for a smaller model
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import os
 
-# Download and cache the model & tokenizer
-model = GPT2LMHeadModel.from_pretrained(model_name)
-tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+MODEL_NAME = "stabilityai/phi-2-small"
+LOCAL_DIR = "models/phi2-small"  # You can change this path
 
-# Save locally so you can use offline later
-model.save_pretrained('./gpt2')
-tokenizer.save_pretrained('./gpt2')
+os.makedirs(LOCAL_DIR, exist_ok=True)
 
-print("Model and tokenizer have been downloaded and saved locally!")
+print(f"Downloading tokenizer for {MODEL_NAME}...")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, cache_dir=LOCAL_DIR)
+
+print(f"Downloading model for {MODEL_NAME}...")
+model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, cache_dir=LOCAL_DIR)
+
+print(f"Model and tokenizer saved locally at {LOCAL_DIR}")
+print("✅ Phi-2-small is ready to use!")

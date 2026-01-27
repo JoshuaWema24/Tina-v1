@@ -1,49 +1,76 @@
-from transformers import pipeline
+# experts/conversation.py
 
-# Load model ONCE at startup
+import logging
+import asyncio
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+logger = logging.getLogger("Tina")
+
+MODEL_NAME = "microsoft/DialoGPT-small"
+
 try:
-    conversation_model = pipeline(
-        "text-generation",
-        model="gpt2"  # Using the full GPT-2 model
-    )
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model.eval()
 except Exception as e:
-    conversation_model = None
-    print("⚠️ Failed to load conversation model:", e)
+    tokenizer = None
+    model = None
+    logger.error(f"Failed to load DialoGPT: {e}", exc_info=True)
+
+FALLBACK = "Hello! 😊 How can I help you today?"
+
+# Hard blacklist to kill junk output
+BAD_TOKENS = ["lol", "xd", "jk", "haha", "!!!", "???", "lmao"]
 
 
-def handle(text: str) -> str:
-    """
-    Handles conversation-related queries using a local language model.
-    """
+async def handle(text: str) -> str:
+    if tokenizer is None or model is None:
+        return FALLBACK
 
-    if conversation_model is None:
-        return "Sorry, my conversation module is not available right now."
-
-    # Simple, controlled prompt
-    prompt = (
-        "You are Tina, a friendly and helpful AI assistant.\n"
-        f"User: {text}\n"
-        "Tina:"
-    )
+    text = text.strip()
+    if not text:
+        return FALLBACK
 
     try:
-        output = conversation_model(
-            prompt,
-            max_length=120,  
-            max_new_tokens=256,  
-            truncation=True, 
-            do_sample=True,
-            temperature=0.7,
-            num_return_sequences=1
+        # VERY IMPORTANT:
+        # DialoGPT works best with JUST the user input
+        input_ids = tokenizer.encode(
+            text + tokenizer.eos_token,
+            return_tensors="pt"
         )
 
-        generated_text = output[0]["generated_text"]
+        attention_mask = torch.ones_like(input_ids)
 
-        # Extract only Tina's reply
-        response = generated_text.split("Tina:")[-1].strip()
+        output_ids = await asyncio.to_thread(
+            model.generate,
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=40,       # SHORT answers
+            do_sample=False,         # 🔥 NO SAMPLING
+            num_beams=1,             # deterministic
+            repetition_penalty=1.4,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id
+        )
 
-        return response if response else "I’m not sure how to respond to that."
+        response = tokenizer.decode(
+            output_ids[0][input_ids.shape[-1]:],
+            skip_special_tokens=True
+        ).strip()
+
+        # Hard cleanup
+        response_lower = response.lower()
+        if (
+            not response
+            or len(response) < 2
+            or any(bad in response_lower for bad in BAD_TOKENS)
+        ):
+            return FALLBACK
+
+        # Final clamp
+        return response[:200]
 
     except Exception as e:
-        print("⚠️ Conversation error:", e)
-        return "Something went wrong while thinking."
+        logger.error(f"Conversation error: {e}", exc_info=True)
+        return FALLBACK
