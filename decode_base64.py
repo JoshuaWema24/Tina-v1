@@ -1,21 +1,11 @@
-# download_phi2.py
-"""
-Download and cache the Phi-2-small model locally for Tina.
-"""
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import os
+model_name = "mosaicml/mpt-7b-chat"
 
-MODEL_NAME = "stabilityai/phi-2-small"
-LOCAL_DIR = "models/phi2-small"  # You can change this path
-
-os.makedirs(LOCAL_DIR, exist_ok=True)
-
-print(f"Downloading tokenizer for {MODEL_NAME}...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, cache_dir=LOCAL_DIR)
-
-print(f"Downloading model for {MODEL_NAME}...")
-model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, cache_dir=LOCAL_DIR)
-
-print(f"Model and tokenizer saved locally at {LOCAL_DIR}")
-print("✅ Phi-2-small is ready to use!")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    trust_remote_code=True,
+    device_map="auto",  # automatically chooses GPU/CPU
+    torch_dtype="auto"  # automatically chooses float16 if GPU supports
+)

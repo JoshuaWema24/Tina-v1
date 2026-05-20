@@ -1,55 +1,60 @@
-# cli.py
-
+import logging
 import asyncio
-from core.router import classify_intent
-from experts import conversation, coding, knowledge, hacking, action
+
+from core.orchestrator import process
 
 
-async def run_cli():
-    print("🤖 Tina is running")
-    print("Type 'exit' to quit.\n")
+async def main():
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("Tina")
+
+    print("\n🤖 Tina AI CLI (Ollama Powered)")
+    print("Type 'exit' or 'quit' to stop.\n")
 
     while True:
-        user_input = input("You > ").strip()
-
-        if not user_input:
-            continue
-
-        if user_input.lower() in ["exit", "quit", "shutdown", "sleep"]:
-            print("Tina > Goodbye!")
-            break
-
-        intent = classify_intent(user_input)
 
         try:
-            if intent == "coding":
-                response = coding.handle(user_input)
+            user_input = await asyncio.to_thread(input, "You: ")
+            user_input = user_input.strip()
 
-            elif intent == "knowledge":
-                response = knowledge.handle(user_input)
+            if not user_input:
+                continue
 
-            elif intent == "hacking":
-                # If hacking is async, use await; otherwise remove await
-                if asyncio.iscoroutinefunction(hacking.handle):
-                    response = await hacking.handle(user_input)
+            if user_input.lower() in ["exit", "quit"]:
+                print("Tina: Goodbye 👋")
+                break
+
+            # ==========================
+            # PROCESS THROUGH ORCHESTRATOR
+            # ==========================
+            result = await process(user_input)
+
+            # ==========================
+            # SAFE OUTPUT HANDLING
+            # ==========================
+            if isinstance(result, dict):
+
+                if result.get("type") == "chat":
+                    print(f"Tina: {result.get('reply', '')}\n")
+
+                elif result.get("type") == "action":
+                    print(f"Tina (action): {result.get('reply', '')}\n")
+
                 else:
-                    response = hacking.handle(user_input)
+                    print(f"Tina: {result}\n")
 
-            elif intent == "action":
-                # If action is async
-                if asyncio.iscoroutinefunction(action.handle):
-                    response = await action.handle(user_input)
-                else:
-                    response = action.handle(user_input)
+            else:
+                print(f"Tina: {result}\n")
 
-            else:  # conversation
-                response = await conversation.handle(user_input)
+        except KeyboardInterrupt:
+            print("\nTina: Interrupted. Bye 👋")
+            break
 
         except Exception as e:
-            response = f"⚠️ Error: {e}"
-
-        print(f"Tina ({intent}) > {response}\n")
+            logger.error(f"Error: {e}")
+            print("Tina: Something went wrong. Try again.\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(run_cli())
+    asyncio.run(main())

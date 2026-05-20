@@ -1,26 +1,66 @@
+# core/router.py
 
-CODING_KEYWORDS = ["code", "python", "java", "bug", "error", "function", "script"]
-KNOWLEDGE_KEYWORDS = ["what is", "who is", "explain", "define", "meaning of", "how does", "describe"]
-ACTION_KEYWORDS = ["open", "send", "call", "run", "show me", "turn on", "turn off"]
-HACKING_KEYWORDS = ["hack", "hacking", "cybersecurity", "penetration testing"]
+from core.intent import classify_intents
 
-INTENTS = {
-    "coding": CODING_KEYWORDS,
-    "knowledge": KNOWLEDGE_KEYWORDS,
-    "action": ACTION_KEYWORDS,
-    "hacking": HACKING_KEYWORDS
+from experts import (
+    conversation,
+    action,
+    coding,
+    knowledge,
+    security
+)
+
+# =====================================================
+# 🧠 EXPERT MAP
+# =====================================================
+
+EXPERT_MAP = {
+    "conversation": conversation,
+    "action": action,
+    "coding": coding,
+    "knowledge": knowledge,
+    "security": security,
+
+    # temporary emotion handling
+    # later you'll create emotion.py
+    "emotion": conversation
 }
 
+# =====================================================
+# 🧠 ROUTER
+# =====================================================
 
-def classify_intent(text: str) -> str:
-    """
-    Classifies the intent of the given text.
-    Returns: coding, knowledge, action, hacking, or conversation (default)
-    """
-    text = text.lower().strip()
+def route(text: str):
 
-    for intent, keywords in INTENTS.items():
-        if any(keyword in text for keyword in keywords):
-            return intent
+    # ================================================
+    # DETECT MULTIPLE INTENTS
+    # ================================================
+    intents = classify_intents(text)
 
-    return "conversation"
+    experts = []
+
+    # ================================================
+    # MAP INTENTS → EXPERTS
+    # ================================================
+    for intent in intents:
+
+        expert = EXPERT_MAP.get(intent)
+
+        # avoid duplicate experts
+        if expert and expert not in experts:
+            experts.append(expert)
+
+    # ================================================
+    # SAFETY FALLBACK
+    # ================================================
+    if not experts:
+        experts.append(conversation)
+        intents = ["conversation"]
+
+    # ================================================
+    # FINAL ROUTING OBJECT
+    # ================================================
+    return {
+        "intents": intents,
+        "experts": experts
+    }
