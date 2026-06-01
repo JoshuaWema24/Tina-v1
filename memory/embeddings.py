@@ -1,106 +1,81 @@
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
-
 # =====================================
-# LOAD EMBEDDING MODEL
+# LOAD MODEL (ONCE)
 # =====================================
-
-model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
-)
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 # =====================================
-# CREATE EMBEDDING
+# MAIN JARVIS EMBEDDING FUNCTION
 # =====================================
-def create_embedding(text):
+def embed_text(text: str):
     """
-    Converts text into a vector embedding.
+    Standard embedding function used by all memory systems.
     """
 
-    embedding = model.encode(text)
+    vector = model.encode(text)
 
-    return embedding
+    return vector.tolist()
+
+
+# =====================================
+# ALIAS (BACKWARD COMPATIBILITY)
+# =====================================
+def create_embedding(text: str):
+    """
+    Alias for embed_text (keeps old code working).
+    """
+    return embed_text(text)
 
 
 # =====================================
 # COSINE SIMILARITY
 # =====================================
 def cosine_similarity(vec1, vec2):
-    """
-    Measures similarity between two vectors.
-    """
-
     vec1 = np.array(vec1)
     vec2 = np.array(vec2)
 
-    similarity = np.dot(vec1, vec2) / (
-        np.linalg.norm(vec1)
-        * np.linalg.norm(vec2)
+    return np.dot(vec1, vec2) / (
+        np.linalg.norm(vec1) * np.linalg.norm(vec2)
     )
 
-    return similarity
-
 
 # =====================================
-# FIND MOST SIMILAR MEMORIES
+# FIND SIMILAR MEMORIES
 # =====================================
-def find_similar_memories(
-    query,
-    memories,
-    top_k=3
-):
+def find_similar_memories(query, memories, top_k=3):
     """
-    Finds memories most similar to the query.
-    
-    memories should be a list of strings.
+    Semantic search over memory list.
     """
 
-    query_embedding = create_embedding(query)
+    query_embedding = embed_text(query)
 
-    scored_memories = []
+    scored = []
 
     for memory in memories:
+        memory_embedding = embed_text(memory)
 
-        memory_embedding = create_embedding(memory)
+        score = cosine_similarity(query_embedding, memory_embedding)
 
-        similarity = cosine_similarity(
-            query_embedding,
-            memory_embedding
-        )
+        scored.append((memory, score))
 
-        scored_memories.append(
-            (memory, similarity)
-        )
+    scored.sort(key=lambda x: x[1], reverse=True)
 
-    # Sort by similarity descending
-    scored_memories.sort(
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    return scored_memories[:top_k]
+    return scored[:top_k]
 
 
 # =====================================
 # FORMAT RESULTS
 # =====================================
 def format_similar_memories(results):
-    """
-    Formats similarity results into readable text.
-    """
-
     if not results:
         return ""
 
-    output = "Relevant Semantic Memories:\n"
+    text = "Relevant Semantic Memories:\n"
 
     for memory, score in results:
+        text += f"- {memory} (score: {score:.2f})\n"
 
-        output += (
-            f"- {memory} "
-            f"(similarity: {score:.2f})\n"
-        )
-
-    return output
+    return text

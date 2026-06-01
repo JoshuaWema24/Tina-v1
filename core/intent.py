@@ -1,131 +1,157 @@
-# core/intent.py
+import re
 
 # =====================================================
-# 🧠 CODING
+# 🧠 KEYWORDS
+# (kept for fallback classification)
 # =====================================================
 
 CODING_KEYWORDS = [
-    "code",
-    "python",
-    "java",
-    "bug",
-    "error",
-    "function",
-    "script",
-    "programming",
-    "developer",
-    "coding",
-    "debug"
+    "code", "python", "java", "bug", "error", "function",
+    "script", "programming", "developer", "coding", "debug"
 ]
-
-# =====================================================
-# 🧠 KNOWLEDGE
-# =====================================================
 
 KNOWLEDGE_KEYWORDS = [
-    "what is",
-    "who is",
-    "explain",
-    "define",
-    "meaning of",
-    "how does",
-    "describe",
-    "tell me about"
+    "what is", "who is", "explain", "define", "meaning of",
+    "how does", "describe", "tell me about"
 ]
-
-# =====================================================
-# 🧠 ACTIONS
-# =====================================================
-
-ACTION_KEYWORDS = [
-    "open",
-    "send",
-    "call",
-    "run",
-    "launch",
-    "start",
-    "show me",
-    "turn on",
-    "turn off",
-    "close",
-    "play"
-]
-
-# =====================================================
-# 🧠 SECURITY
-# =====================================================
 
 SECURITY_KEYWORDS = [
-    "hack",
-    "hacking",
-    "cybersecurity",
-    "penetration testing",
-    "exploit",
-    "vulnerability",
-    "security"
+    "hack", "hacking", "cybersecurity", "penetration testing",
+    "exploit", "vulnerability", "security"
 ]
-
-# =====================================================
-# 🧠 EMOTIONS
-# =====================================================
 
 EMOTION_KEYWORDS = [
-    "sad",
-    "happy",
-    "bored",
-    "angry",
-    "lonely",
-    "tired",
-    "stressed",
-    "frustrated",
-    "excited"
+    "sad", "happy", "bored", "angry", "lonely",
+    "tired", "stressed", "frustrated", "excited"
 ]
 
 # =====================================================
-# 🧠 INTENT MAP
+# 🧠 ACTION INTENT PARSER (IMPORTANT FIX)
 # =====================================================
 
-INTENT_MAP = {
-    "coding": CODING_KEYWORDS,
-    "knowledge": KNOWLEDGE_KEYWORDS,
-    "action": ACTION_KEYWORDS,
-    "security": SECURITY_KEYWORDS,
-    "emotion": EMOTION_KEYWORDS
-}
-
-
-# =====================================================
-# 🧠 MULTI-INTENT CLASSIFIER
-# =====================================================
-
-def classify_intents(text: str):
+def parse_action(text: str):
+    """
+    Extracts actionable command + target.
+    Example:
+        "open chrome" → ("open_app", "chrome")
+    """
 
     text = text.lower().strip()
 
-    detected = []
+    # OPEN / LAUNCH APP
+    match = re.search(r"(open|launch|start)\s+(.+)", text)
+    if match:
+        target = match.group(2).strip()
 
-    for intent, keywords in INTENT_MAP.items():
+        return {
+            "intent": "action",
+            "tool": "open_app",
+            "target": target
+        }
 
-        if any(keyword in text for keyword in keywords):
+    # CLOSE APP
+    match = re.search(r"(close|exit|quit)\s+(.+)", text)
+    if match:
+        target = match.group(2).strip()
 
-            detected.append(intent)
+        return {
+            "intent": "action",
+            "tool": "close_app",
+            "target": target
+        }
 
-    # =================================================
-    # DEFAULT FALLBACK
-    # =================================================
+    # PLAY MEDIA
+    match = re.search(r"(play)\s+(.+)", text)
+    if match:
+        target = match.group(2).strip()
 
-    if not detected:
-        detected.append("conversation")
+        return {
+            "intent": "action",
+            "tool": "play_media",
+            "target": target
+        }
 
-    return detected
+    return None
 
 
 # =====================================================
-# 🧠 SINGLE INTENT (BACKWARD COMPATIBILITY)
+# 🧠 MAIN CLASSIFIER
 # =====================================================
 
-def classify_intent(text: str) -> str:
+def classify_intent(text: str):
+    text = text.lower().strip()
 
-    intents = classify_intents(text)
+    # =========================
+    # 1. ACTION CHECK FIRST
+    # =========================
+    action = parse_action(text)
+    if action:
+        return action
 
-    return intents[0]
+    # =========================
+    # 2. CODING
+    # =========================
+    if any(k in text for k in CODING_KEYWORDS):
+        return {
+            "intent": "coding"
+        }
+
+    # =========================
+    # 3. KNOWLEDGE
+    # =========================
+    if any(k in text for k in KNOWLEDGE_KEYWORDS):
+        return {
+            "intent": "knowledge"
+        }
+
+    # =========================
+    # 4. SECURITY
+    # =========================
+    if any(k in text for k in SECURITY_KEYWORDS):
+        return {
+            "intent": "security"
+        }
+
+    # =========================
+    # 5. EMOTION
+    # =========================
+    if any(k in text for k in EMOTION_KEYWORDS):
+        return {
+            "intent": "emotion"
+        }
+
+    # =========================
+    # 6. DEFAULT CONVERSATION
+    # =========================
+    return {
+        "intent": "conversation"
+    }
+
+
+# =====================================================
+# 🧠 OPTIONAL MULTI-INTENT (FUTURE UPGRADE HOOK)
+# =====================================================
+
+def classify_intents(text: str):
+    """
+    Future: multi-intent support (not used yet).
+    """
+
+    intents = []
+
+    if any(k in text.lower() for k in CODING_KEYWORDS):
+        intents.append("coding")
+
+    if any(k in text.lower() for k in KNOWLEDGE_KEYWORDS):
+        intents.append("knowledge")
+
+    if any(k in text.lower() for k in SECURITY_KEYWORDS):
+        intents.append("security")
+
+    if any(k in text.lower() for k in EMOTION_KEYWORDS):
+        intents.append("emotion")
+
+    if not intents:
+        intents.append("conversation")
+
+    return intents

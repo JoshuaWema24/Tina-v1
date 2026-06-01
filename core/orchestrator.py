@@ -1,11 +1,9 @@
-# core/orchestrator.py
-
 from core.router import route
 from core.personality import PERSONALITY_PROMPT
+from core.llm import llm
 
 from memory.short_term import add
-
-from core.llm import llm
+from memory.retrieval import build_memory_context
 
 import asyncio
 import logging
@@ -14,68 +12,57 @@ logger = logging.getLogger("Tina")
 
 
 # =====================================================
-# 🧠 RESPONSE UNIFIER
+# 🧠 RESPONSE UNIFIER (IMPROVED)
 # =====================================================
-
-async def unify_response(
-    user_input: str,
-    intents: list,
-    expert_outputs: list
-) -> str:
+async def unify_response(user_input, intents, expert_outputs, memory_context):
 
     try:
 
         combined = "\n".join(expert_outputs)
 
         prompt = f"""
-User said:
+You are Tina, a cognitive assistant.
+
+USER INPUT:
 {user_input}
 
-Detected intents:
+INTENTS:
 {", ".join(intents)}
 
-Expert outputs:
+MEMORY CONTEXT:
+{memory_context}
+
+EXPERT OUTPUTS:
 {combined}
 
-Rewrite this into ONE unified Tina response.
+TASK:
+Merge everything into ONE intelligent response.
 
 RULES:
-- Sound natural and intelligent
-- Keep responses smooth and conversational
+- Use memory when relevant
+- Prioritize correctness over creativity
+- Be natural and conversational
 - Never mention experts
-- Never sound robotic
-- Preserve important meaning
-- Merge everything into ONE response
-- If actions occurred, acknowledge them naturally
-- Keep Tina's personality consistent
+- Keep response concise but meaningful
+- If memory contradicts input, clarify politely
 """
 
-        result = llm.chat(
+        return llm.chat(
             user_prompt=prompt,
             system_prompt=PERSONALITY_PROMPT,
             temperature=0.2,
-            max_tokens=120
-        )
-
-        if result:
-            return result.strip()
-
-        return combined
+            max_tokens=180
+        ).strip()
 
     except Exception as e:
 
-        logger.error(
-            f"Response unifier error: {e}",
-            exc_info=True
-        )
-
+        logger.error(f"Unifier error: {e}", exc_info=True)
         return "\n".join(expert_outputs)
 
 
 # =====================================================
-# 🧠 MAIN ORCHESTRATOR
+# 🧠 MAIN ORCHESTRATOR (UPGRADED)
 # =====================================================
-
 async def process(text: str):
 
     routing = route(text)
@@ -86,22 +73,27 @@ async def process(text: str):
     try:
 
         # =================================================
-        # 1. RUN ALL EXPERTS
+        # 0. MEMORY CONTEXT (NEW - CRITICAL)
         # =================================================
+        memory_context = build_memory_context(text)
 
+        # =================================================
+        # 1. RUN EXPERTS WITH CONTEXT
+        # =================================================
         expert_results = []
 
         for expert in experts:
 
-            result = expert.handle(text)
+            # inject memory context into expert if supported
+            if hasattr(expert, "handle_with_context"):
+                result = expert.handle_with_context(text, memory_context)
+            else:
+                result = expert.handle(text)
 
-            # async-safe
             if asyncio.iscoroutine(result):
                 result = await result
 
-            # normalize
             if isinstance(result, str):
-
                 result = {
                     "type": "chat",
                     "reply": result
@@ -110,48 +102,41 @@ async def process(text: str):
             expert_results.append(result)
 
         # =================================================
-        # 2. EXTRACT OUTPUTS
+        # 2. EXTRACT RESULTS
         # =================================================
-
         replies = []
         collected_data = []
-
         final_type = "chat"
 
-        for result in expert_results:
+        for r in expert_results:
 
-            reply = result.get("reply", "")
+            if r.get("reply"):
+                replies.append(r["reply"])
 
-            if reply:
-                replies.append(reply)
+            if r.get("data"):
+                collected_data.append(r["data"])
 
-            if result.get("data"):
-                collected_data.append(result.get("data"))
-
-            # if ANY expert is action → final type becomes action
-            if result.get("type") == "action":
+            if r.get("type") == "action":
                 final_type = "action"
 
         # =================================================
-        # 3. UNIFY RESPONSES
+        # 3. UNIFY RESPONSE (NOW MEMORY-AWARE)
         # =================================================
-
         final_reply = await unify_response(
             user_input=text,
             intents=intents,
-            expert_outputs=replies
+            expert_outputs=replies,
+            memory_context=memory_context
         )
 
         # =================================================
-        # 4. MEMORY STORAGE
+        # 4. MEMORY STORAGE (SMARTER NOW)
         # =================================================
-
         add(text, final_reply)
 
         # =================================================
-        # 5. FINAL RESPONSE CONTRACT
+        # 5. RETURN CONTRACT
         # =================================================
-
         return {
             "intents": intents,
             "type": final_type,
@@ -161,16 +146,10 @@ async def process(text: str):
 
     except Exception as e:
 
-        logger.error(
-            f"Orchestrator error: {e}",
-            exc_info=True
-        )
+        logger.error(f"Orchestrator error: {e}", exc_info=True)
 
         return {
             "intents": ["conversation"],
             "type": "chat",
-            "reply": (
-                "Something went wrong while "
-                "processing that."
-            )
+            "reply": "Something went wrong while processing that."
         }
