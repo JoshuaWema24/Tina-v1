@@ -12,57 +12,125 @@ logger = logging.getLogger("Tina")
 
 
 # =====================================================
-# 🧠 RESPONSE UNIFIER (IMPROVED)
+# 🧠 MEMORY USAGE GATE (IMPORTANT)
 # =====================================================
-async def unify_response(user_input, intents, expert_outputs, memory_context):
+
+def should_use_memory(text: str) -> bool:
+
+    keywords = [
+        "remember",
+        "we talked",
+        "last time",
+        "before",
+        "earlier",
+        "continue",
+        "project",
+        "update",
+        "again",
+        "that"
+    ]
+
+    text = text.lower()
+
+    return any(k in text for k in keywords)
+
+
+# =====================================================
+# 🧠 MEMORY FORMATTER (STRUCTURED CONTEXT)
+# =====================================================
+
+def format_memory_block(memory_context: str) -> str:
+
+    if not memory_context:
+        return ""
+
+    return f"""
+[LONG_TERM_MEMORY]
+{memory_context}
+
+[MEMORY_RULES]
+- Use memory only if relevant
+- Do not assume memory is always correct
+- Resolve contradictions using latest user input
+- Ignore memory if unrelated
+"""
+
+
+# =====================================================
+# 🧠 RESPONSE UNIFIER (COGNITIVE FUSION ENGINE)
+# =====================================================
+
+async def unify_response(
+    user_input,
+    intents,
+    expert_outputs,
+    memory_context
+):
 
     try:
 
         combined = "\n".join(expert_outputs)
 
-        prompt = f"""
-You are Tina, a cognitive assistant.
+        memory_block = format_memory_block(memory_context)
 
-USER INPUT:
+        prompt = f"""
+You are Tina, a persistent cognitive assistant.
+
+========================
+USER INPUT
+========================
 {user_input}
 
-INTENTS:
+========================
+INTENTS
+========================
 {", ".join(intents)}
 
-MEMORY CONTEXT:
-{memory_context}
+========================
+MEMORY CONTEXT
+========================
+{memory_block}
 
-EXPERT OUTPUTS:
+========================
+EXPERT OUTPUTS
+========================
 {combined}
 
-TASK:
-Merge everything into ONE intelligent response.
-
-RULES:
-- Use memory when relevant
+========================
+COGNITIVE INSTRUCTIONS
+========================
+- You are a single unified intelligence
+- Use memory as background knowledge only
+- Never mention internal systems, experts, or routing
+- Be natural, calm, and intelligent
 - Prioritize correctness over creativity
-- Be natural and conversational
-- Never mention experts
+- If memory conflicts with input, clarify gently
 - Keep response concise but meaningful
-- If memory contradicts input, clarify politely
+
+FINAL TASK:
+Generate ONE coherent response.
 """
 
-        return llm.chat(
+        result = llm.chat(
             user_prompt=prompt,
             system_prompt=PERSONALITY_PROMPT,
             temperature=0.2,
-            max_tokens=180
-        ).strip()
+            max_tokens=200
+        )
+
+        return result.strip() if result else "\n".join(expert_outputs)
 
     except Exception as e:
 
         logger.error(f"Unifier error: {e}", exc_info=True)
+
         return "\n".join(expert_outputs)
 
 
 # =====================================================
-# 🧠 MAIN ORCHESTRATOR (UPGRADED)
+# 🧠 MAIN ORCHESTRATOR
 # =====================================================
+
 async def process(text: str):
 
     routing = route(text)
@@ -73,18 +141,20 @@ async def process(text: str):
     try:
 
         # =================================================
-        # 0. MEMORY CONTEXT (NEW - CRITICAL)
+        # 1. MEMORY CONTEXT (GATED)
         # =================================================
-        memory_context = build_memory_context(text)
+        memory_context = ""
+
+        if should_use_memory(text):
+            memory_context = build_memory_context(text)
 
         # =================================================
-        # 1. RUN EXPERTS WITH CONTEXT
+        # 2. RUN EXPERT SYSTEMS
         # =================================================
         expert_results = []
 
         for expert in experts:
 
-            # inject memory context into expert if supported
             if hasattr(expert, "handle_with_context"):
                 result = expert.handle_with_context(text, memory_context)
             else:
@@ -102,7 +172,7 @@ async def process(text: str):
             expert_results.append(result)
 
         # =================================================
-        # 2. EXTRACT RESULTS
+        # 3. EXTRACT OUTPUTS
         # =================================================
         replies = []
         collected_data = []
@@ -120,7 +190,7 @@ async def process(text: str):
                 final_type = "action"
 
         # =================================================
-        # 3. UNIFY RESPONSE (NOW MEMORY-AWARE)
+        # 4. MEMORY-AWARE FUSION
         # =================================================
         final_reply = await unify_response(
             user_input=text,
@@ -130,12 +200,12 @@ async def process(text: str):
         )
 
         # =================================================
-        # 4. MEMORY STORAGE (SMARTER NOW)
+        # 5. MEMORY WRITE-BACK
         # =================================================
         add(text, final_reply)
 
         # =================================================
-        # 5. RETURN CONTRACT
+        # 6. RETURN CONTRACT
         # =================================================
         return {
             "intents": intents,
