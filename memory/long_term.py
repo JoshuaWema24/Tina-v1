@@ -89,7 +89,7 @@ def search_memories(keyword):
 
     cursor.execute("""
         SELECT * FROM memories
-        WHERE memory LIKE ?
+        WHERE content LIKE ?
         ORDER BY importance DESC, created_at DESC
     """, (f"%{keyword}%",))
 

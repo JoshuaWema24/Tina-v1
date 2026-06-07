@@ -2,37 +2,14 @@ from core.router import route
 from core.personality import PERSONALITY_PROMPT
 from core.llm import llm
 
-from memory.short_term import add
+from memory.short_term import add, get_recent_context
 from memory.retrieval import build_memory_context
+from tools.executor import execute
 
 import asyncio
 import logging
 
 logger = logging.getLogger("Tina")
-
-
-# =====================================================
-# 🧠 MEMORY USAGE GATE (IMPORTANT)
-# =====================================================
-
-def should_use_memory(text: str) -> bool:
-
-    keywords = [
-        "remember",
-        "we talked",
-        "last time",
-        "before",
-        "earlier",
-        "continue",
-        "project",
-        "update",
-        "again",
-        "that"
-    ]
-
-    text = text.lower()
-
-    return any(k in text for k in keywords)
 
 
 # =====================================================
@@ -64,7 +41,9 @@ async def unify_response(
     user_input,
     intents,
     expert_outputs,
-    memory_context
+    memory_context,
+    conversation_history,
+    tool_reply=""
 ):
 
     try:
@@ -73,8 +52,20 @@ async def unify_response(
 
         memory_block = format_memory_block(memory_context)
 
+        history_block = conversation_history if conversation_history else "No prior conversation."
+
+        tool_block = (
+            f"\n========================\nTOOL RESULT\n========================\n{tool_reply}"
+            if tool_reply else ""
+        )
+
         prompt = f"""
 You are Tina, a persistent cognitive assistant.
+
+========================
+CONVERSATION HISTORY
+========================
+{history_block}
 
 ========================
 USER INPUT
@@ -95,20 +86,25 @@ MEMORY CONTEXT
 EXPERT OUTPUTS
 ========================
 {combined}
+{tool_block}
 
 ========================
 COGNITIVE INSTRUCTIONS
 ========================
 - You are a single unified intelligence
+- ALWAYS use conversation history to maintain full context across turns
+- Never lose track of ongoing topics like projects, tasks, or previous requests
+- If the user references something said earlier (e.g. "that project", "continue", "yes"), resolve it from history
+- If a TOOL RESULT is present, confirm the action naturally (e.g. "Chrome is open!") — do NOT say you will do it, it's already done
 - Use memory as background knowledge only
-- Never mention internal systems, experts, or routing
+- Never mention internal systems, experts, or routing to the user
 - Be natural, calm, and intelligent
 - Prioritize correctness over creativity
 - If memory conflicts with input, clarify gently
 - Keep response concise but meaningful
 
 FINAL TASK:
-Generate ONE coherent response.
+Generate ONE coherent, context-aware response.
 """
 
         result = llm.chat(
@@ -141,15 +137,22 @@ async def process(text: str):
     try:
 
         # =================================================
-        # 1. MEMORY CONTEXT (GATED)
+        # 1. PULL CONVERSATION HISTORY (ALWAYS)
+        # =================================================
+        conversation_history = get_recent_context(limit=6)
+
+        # =================================================
+        # 2. MEMORY CONTEXT (ALWAYS ATTEMPT, NEVER GATE)
         # =================================================
         memory_context = ""
 
-        if should_use_memory(text):
+        try:
             memory_context = build_memory_context(text)
+        except Exception as e:
+            logger.warning(f"Memory retrieval skipped: {e}")
 
         # =================================================
-        # 2. RUN EXPERT SYSTEMS
+        # 3. RUN EXPERT SYSTEMS
         # =================================================
         expert_results = []
 
@@ -172,11 +175,12 @@ async def process(text: str):
             expert_results.append(result)
 
         # =================================================
-        # 3. EXTRACT OUTPUTS
+        # 4. EXTRACT OUTPUTS + EXECUTE TOOLS
         # =================================================
         replies = []
         collected_data = []
         final_type = "chat"
+        tool_reply = ""
 
         for r in expert_results:
 
@@ -188,24 +192,41 @@ async def process(text: str):
 
             if r.get("type") == "action":
                 final_type = "action"
+                tool_name = r.get("tool")
+
+                if tool_name:
+                    logger.info(f"Dispatching tool: {tool_name}")
+                    tool_result = execute(tool_name)
+
+                    if tool_result["success"]:
+                        tool_reply = (
+                            tool_result["message"]
+                            or f"Done — {tool_name.replace('_', ' ')} launched."
+                        )
+                        logger.info(f"Tool succeeded: {tool_name}")
+                    else:
+                        tool_reply = f"I tried to {tool_name.replace('_', ' ')} but something went wrong: {tool_result['message']}"
+                        logger.warning(f"Tool failed: {tool_name} — {tool_result['message']}")
 
         # =================================================
-        # 4. MEMORY-AWARE FUSION
+        # 5. MEMORY-AWARE FUSION (NOW WITH HISTORY)
         # =================================================
         final_reply = await unify_response(
             user_input=text,
             intents=intents,
             expert_outputs=replies,
-            memory_context=memory_context
+            memory_context=memory_context,
+            conversation_history=conversation_history,
+            tool_reply=tool_reply
         )
 
         # =================================================
-        # 5. MEMORY WRITE-BACK
+        # 6. MEMORY WRITE-BACK
         # =================================================
         add(text, final_reply)
 
         # =================================================
-        # 6. RETURN CONTRACT
+        # 7. RETURN CONTRACT
         # =================================================
         return {
             "intents": intents,

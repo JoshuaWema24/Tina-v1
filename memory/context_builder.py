@@ -2,7 +2,7 @@ from memory.short_term import format_for_prompt
 from memory.retrieval import build_memory_context
 from memory.long_term import get_memories
 from memory.embeddings import find_similar_memories
-
+from memory.state import state
 
 # =====================================================
 # 🧠 BUILD FULL CONTEXT (FUSION LAYER)
@@ -59,3 +59,24 @@ def build_context(user_input: str):
     )
 
     return final_context
+
+def build_state_context():
+
+    context = []
+
+    if state.active_project:
+        context.append(
+            f"Active Project: {state.active_project}"
+        )
+
+    if state.current_topic:
+        context.append(
+            f"Current Topic: {state.current_topic}"
+        )
+
+    if state.current_goal:
+        context.append(
+            f"Current Goal: {state.current_goal}"
+        )
+
+    return "\n".join(context)
